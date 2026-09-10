@@ -2,28 +2,56 @@ package main
 
 import (
 	"fmt"
+	"maps"
 	"os"
+	"slices"
 	"strconv"
+
+	// "strings"
 	"time"
 
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/Tillter2998/biltongTUI/internal/enums"
+	"github.com/Tillter2998/biltongTUI/internal/quicksort"
 )
 
 type clearErrorMsg struct{}
 
-type model struct {
-	weightInput         textinput.Model
-	quitting            bool
+type optionsModel struct {
+	cursor   int
+	choices  []string
+	selected map[enums.Ingredients]string
+}
+
+type weightInputModel struct {
+	input    textinput.Model
+	inputErr string
+	errStyle lipgloss.Style
+}
+
+type ingredientsModel struct {
 	redWineVinegar      float64
 	worcestershireSauce float64
 	salt                float64
 	pepperCorn          float64
 	corianderSeed       float64
-	inputErr            string
-	errStyle            lipgloss.Style
+	chiliFlakes         *float64
 }
+
+type model struct {
+	options     optionsModel
+	weightInput weightInputModel
+	ingredients ingredientsModel
+	focus       int
+	quitting    bool
+}
+
+const (
+	focusInput = iota
+	focusMenu
+)
 
 func main() {
 	p := tea.NewProgram(initialModel())
@@ -34,17 +62,18 @@ func main() {
 }
 
 func (m *model) calculate() tea.Cmd {
-	weight, err := strconv.ParseFloat(m.weightInput.Value(), 64)
+	weight, err := strconv.ParseFloat(m.weightInput.input.Value(), 64)
 	if err != nil {
-		m.inputErr = "Input must be a number"
+		m.weightInput.inputErr = "Input must be a number"
 		return clearErrorCmd()
 	}
 
-	m.redWineVinegar = 0.02643 * weight
-	m.worcestershireSauce = 0.01322 * weight
-	m.salt = 0.02247 * weight
-	m.pepperCorn = 0.00749 * weight
-	m.corianderSeed = 0.015 * weight
+	// TODO: Update this so that it only calculates for selected ingredients
+	m.ingredients.redWineVinegar = 0.02643 * weight
+	m.ingredients.worcestershireSauce = 0.01322 * weight
+	m.ingredients.salt = 0.02247 * weight
+	m.ingredients.pepperCorn = 0.00749 * weight
+	m.ingredients.corianderSeed = 0.015 * weight
 
 	return nil
 }
@@ -62,19 +91,52 @@ func (m model) Init() tea.Cmd {
 func initialModel() model {
 	wi := textinput.New()
 	wi.Placeholder = "1000"
-	wi.SetVirtualCursor(false)
-	wi.Focus()
+	wi.SetVirtualCursor(true)
+	wi.Blur()
 	wi.CharLimit = 156
 	wi.SetWidth(20)
 
+	defaultIngredients := []string{
+		enums.RedWineVinegar.String(),
+		enums.WorcestershireSauce.String(),
+		enums.Salt.String(),
+		enums.PepperCorn.String(),
+		enums.CorianderSeed.String(),
+	}
+
+	keys := slices.Collect(maps.Keys(enums.IngredientName))
+	quicksort.Quicksort(keys, 0, len(keys)-1)
+
+	choices := make([]string, 0, len(keys))
+
+	for _, key := range keys {
+		choices = append(choices, enums.IngredientName[key])
+	}
+
+	selected := make(map[enums.Ingredients]string)
+
+	for index, value := range defaultIngredients {
+		selected[enums.Ingredients(index)] = value
+	}
+
 	return model{
-		weightInput:         wi,
-		redWineVinegar:      26.43,
-		worcestershireSauce: 13.22,
-		salt:                22.47,
-		pepperCorn:          7.49,
-		corianderSeed:       15,
-		errStyle:            lipgloss.NewStyle().Foreground(lipgloss.Color("9")),
+		options: optionsModel{
+			choices:  choices,
+			selected: selected,
+			cursor:   len(enums.IngredientName) - 1,
+		},
+		weightInput: weightInputModel{
+			input:    wi,
+			errStyle: lipgloss.NewStyle().Foreground(lipgloss.Color("9")),
+		},
+		ingredients: ingredientsModel{
+			redWineVinegar:      26.43,
+			worcestershireSauce: 13.22,
+			salt:                22.47,
+			pepperCorn:          7.49,
+			corianderSeed:       15,
+		},
+		focus: focusMenu,
 	}
 }
 
@@ -84,42 +146,80 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case clearErrorMsg:
-		m.inputErr = ""
+		m.weightInput.inputErr = ""
 	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "ctrl + c", "esc":
 			m.quitting = true
 			return m, tea.Quit
-		case "enter":
-			calcCmd := m.calculate()
-			if calcCmd != nil {
-				cmds = append(cmds, calcCmd)
+		case "tab":
+			if m.focus == focusInput {
+				m.focus = focusMenu
+				m.weightInput.input.Blur()
+			} else {
+				m.focus = focusInput
+				m.weightInput.input.Focus()
+			}
+			return m, nil
+		}
+
+		if m.focus == focusInput {
+			switch msg.String() {
+			case "enter":
+				calcCmd := m.calculate()
+				if calcCmd != nil {
+					cmds = append(cmds, calcCmd)
+				}
+			}
+
+			m.weightInput.input, cmd = m.weightInput.input.Update(msg)
+			cmds = append(cmds, cmd)
+		} else {
+			switch msg.String() {
+			case "k", "up":
+				if m.options.cursor > 0 {
+					m.options.cursor--
+				}
+			case "j", "down":
+				if m.options.cursor < len(m.options.choices)-1 {
+					m.options.cursor++
+				}
+			case "enter":
+				converted := enums.Ingredients(m.options.cursor)
+				_, ok := m.options.selected[converted]
+				if ok {
+					delete(m.options.selected, converted)
+					// m.options.selected[converted] = ""
+				} else {
+					m.options.selected[converted] = enums.Ingredients(m.options.cursor).String()
+				}
 			}
 		}
 	}
 
-	m.weightInput, cmd = m.weightInput.Update(msg)
-	cmds = append(cmds, cmd)
+	// if m.focus == focusInput {
+	// 	m.weightInput.input, cmd = m.weightInput.input.Update(msg)
+	// 	cmds = append(cmds, cmd)
+	// }
 	return m, tea.Batch(cmds...)
 }
 
 func (m model) View() tea.View {
 	var c *tea.Cursor
-	if !m.weightInput.VirtualCursor() {
-		c = m.weightInput.Cursor()
-		c.Y += lipgloss.Height(m.headerView())
-	}
+	if !m.weightInput.input.VirtualCursor() {
+		c = m.weightInput.input.Cursor()
 
-	errView := ""
-	if m.inputErr != "" {
-		errView = m.errStyle.Render(m.inputErr)
+		// FIX: Only modify c if it's not nil (it will be nil when blurred!)
+		if c != nil {
+			topHeight := lipgloss.Height(m.optionsView()) + lipgloss.Height(m.inputView())
+			c.Y += topHeight
+		}
 	}
 
 	str := lipgloss.JoinVertical(
 		lipgloss.Top,
-		m.headerView(),
-		m.weightInput.View(),
-		errView,
+		m.optionsView(),
+		m.inputView(),
 		m.ingredientsView(),
 		m.footerView(),
 	)
@@ -133,8 +233,70 @@ func (m model) View() tea.View {
 	return v
 }
 
-func (m model) headerView() string { return "Weight in grams" }
+var sectionStyle = lipgloss.NewStyle().
+	Border(lipgloss.RoundedBorder()).
+	BorderForeground(lipgloss.Color("7")).
+	Padding(0, 1).
+	Width(40)
+
+func (m model) optionsView() string {
+
+	s := "Options:\n"
+	for i, choice := range m.options.choices {
+		cursor := " "
+		if m.options.cursor == i {
+			cursor = ">"
+		}
+		checked := " "
+		if _, ok := m.options.selected[enums.Ingredients(i)]; ok {
+			checked = "x"
+		}
+		s += fmt.Sprintf("%s [%s] %s\n", cursor, checked, choice)
+	}
+
+	borderColor := "7"
+	if m.focus == focusMenu {
+		borderColor = "5"
+	}
+	return sectionStyle.
+		BorderForeground(lipgloss.Color(borderColor)).
+		Render(s)
+}
+func (m model) inputView() string {
+	s := "Weight in Grams:\n"
+
+	s += fmt.Sprintf("%s\n", m.weightInput.input.View())
+
+	errView := ""
+	if m.weightInput.inputErr != "" {
+		errView = m.weightInput.errStyle.Render(m.weightInput.inputErr)
+	}
+
+	s += fmt.Sprintf("%s", errView)
+
+	borderColor := "7"
+	if m.focus == focusInput {
+		borderColor = "5"
+	}
+	return sectionStyle.
+		BorderForeground(lipgloss.Color(borderColor)).
+		Render(s)
+
+}
 func (m model) ingredientsView() string {
-	return fmt.Sprintf("Red Wine Vinegar: %.2fml\nWorcestershire Sauce: %.2fml\nSalt: %.2fg\nPepper Corn: %.2fg\nCoriander Seed: %.2fg", m.redWineVinegar, m.worcestershireSauce, m.salt, m.pepperCorn, m.corianderSeed)
+	// var s strings.Builder
+	// for _, value := range m.options.selected {
+	// 	fmt.Fprintf(&s, "%s: %.2fml\n", value, 0.0)
+	// }
+	// TODO: Update this to only display selected ingredients
+	// Need some way to correlate selected ingredients to their corresponding field in the m.ingredients model
+	s := fmt.Sprintf("Red Wine Vinegar: %.2fml\nWorcestershire Sauce: %.2fml\nSalt: %.2fg\nPepper Corn: %.2fg\nCoriander Seed: %.2fg",
+		m.ingredients.redWineVinegar,
+		m.ingredients.worcestershireSauce,
+		m.ingredients.salt,
+		m.ingredients.pepperCorn,
+		m.ingredients.corianderSeed)
+
+	return sectionStyle.Render(s)
 }
 func (m model) footerView() string { return "\n(esc to quit)" }
