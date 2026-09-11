@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strconv"
 
-	// "strings"
+	"strings"
 	"time"
 
 	"charm.land/bubbles/v2/textinput"
@@ -96,27 +96,19 @@ func initialModel() model {
 	wi.CharLimit = 156
 	wi.SetWidth(20)
 
-	defaultIngredients := []string{
-		enums.RedWineVinegar.String(),
-		enums.WorcestershireSauce.String(),
-		enums.Salt.String(),
-		enums.PepperCorn.String(),
-		enums.CorianderSeed.String(),
+	defaultIngredients := []enums.Ingredients{
+		enums.RedWineVinegar,
+		enums.WorcestershireSauce,
+		enums.Salt,
+		enums.PepperCorn,
+		enums.CorianderSeed,
 	}
 
-	keys := slices.Collect(maps.Keys(enums.IngredientName))
-	quicksort.Quicksort(keys, 0, len(keys)-1)
-
-	choices := make([]string, 0, len(keys))
-
-	for _, key := range keys {
-		choices = append(choices, enums.IngredientName[key])
-	}
+	choices := ingredientsMapToSortedSlice(enums.IngredientName)
 
 	selected := make(map[enums.Ingredients]string)
-
-	for index, value := range defaultIngredients {
-		selected[enums.Ingredients(index)] = value
+	for _, value := range defaultIngredients {
+		selected[enums.Ingredients(value)] = value.String()
 	}
 
 	return model{
@@ -284,19 +276,26 @@ func (m model) inputView() string {
 
 }
 func (m model) ingredientsView() string {
-	// var s strings.Builder
-	// for _, value := range m.options.selected {
-	// 	fmt.Fprintf(&s, "%s: %.2fml\n", value, 0.0)
-	// }
-	// TODO: Update this to only display selected ingredients
-	// Need some way to correlate selected ingredients to their corresponding field in the m.ingredients model
-	s := fmt.Sprintf("Red Wine Vinegar: %.2fml\nWorcestershire Sauce: %.2fml\nSalt: %.2fg\nPepper Corn: %.2fg\nCoriander Seed: %.2fg",
-		m.ingredients.redWineVinegar,
-		m.ingredients.worcestershireSauce,
-		m.ingredients.salt,
-		m.ingredients.pepperCorn,
-		m.ingredients.corianderSeed)
+	var s strings.Builder
+	sorted := ingredientsMapToSortedSlice(m.options.selected)
 
-	return sectionStyle.Render(s)
+	for _, value := range sorted {
+		// TODO: Update this to display the correct quantities
+		fmt.Fprintf(&s, "%s: %.2fml\n", value, 0.0)
+	}
+
+	return sectionStyle.Render(s.String())
 }
 func (m model) footerView() string { return "\n(esc to quit)" }
+
+func ingredientsMapToSortedSlice(choicesMap map[enums.Ingredients]string) []string {
+
+	keys := slices.Collect(maps.Keys(choicesMap))
+	quicksort.Quicksort(keys, 0, len(keys)-1)
+	choices := make([]string, 0, len(keys))
+	for _, key := range keys {
+		choices = append(choices, enums.IngredientName[key])
+	}
+
+	return choices
+}
