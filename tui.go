@@ -1,9 +1,8 @@
-package main
+package tui
 
 import (
 	"fmt"
 	"maps"
-	"os"
 	"slices"
 	"strconv"
 
@@ -54,12 +53,8 @@ const (
 	focusMenu
 )
 
-func main() {
-	p := tea.NewProgram(initialModel())
-	if _, err := p.Run(); err != nil {
-		fmt.Printf("Alas, there's been an error: %v", err)
-		os.Exit(1)
-	}
+func NewModel() tea.Model {
+	return initialModel()
 }
 
 func (m *model) calculateAll() tea.Cmd {
