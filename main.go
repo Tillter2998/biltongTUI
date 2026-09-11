@@ -64,13 +64,6 @@ func (m *model) calculateAll() tea.Cmd {
 		return clearErrorCmd()
 	}
 
-	// TODO: Update this so that it only calculates for selected ingredients
-	// m.ingredients.redWineVinegar = 0.02643 * weight
-	// m.ingredients.worcestershireSauce = 0.01322 * weight
-	// m.ingredients.salt = 0.02247 * weight
-	// m.ingredients.pepperCorn = 0.00749 * weight
-	// m.ingredients.corianderSeed = 0.015 * weight
-
 	for ingredient := range m.options.selected {
 		m.ingredients.amounts[ingredient] = m.ingredients.ratios[ingredient] * weight
 	}
@@ -151,6 +144,7 @@ func initialModel() model {
 				enums.PepperCorn:          7.49,
 				enums.CorianderSeed:       15,
 			},
+			// TODO: Set ratio for chili flakes
 			ratios: map[enums.Ingredients]float64{
 				enums.RedWineVinegar:      0.02643,
 				enums.WorcestershireSauce: 0.01322,
