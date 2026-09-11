@@ -34,8 +34,9 @@ type weightInputModel struct {
 }
 
 type ingredientAmountsModel struct {
-	amounts map[enums.Ingredients]float64
-	ratios  map[enums.Ingredients]float64
+	amounts         map[enums.Ingredients]float64
+	ratios          map[enums.Ingredients]float64
+	measurementUnit map[enums.Ingredients]string
 }
 
 type model struct {
@@ -80,6 +81,10 @@ func (m *model) calculate(ingredient enums.Ingredients) tea.Cmd {
 		m.weightInput.inputErr = "Input must be a number"
 		return clearErrorCmd()
 	}
+	if weight <= 0 {
+		m.weightInput.inputErr = "Input must be greater than 0"
+		return clearErrorCmd()
+	}
 
 	m.ingredients.amounts[ingredient] = m.ingredients.ratios[ingredient] * weight
 
@@ -92,7 +97,7 @@ func (m *model) getWeight() (float64, error) {
 		return 1000, nil
 	}
 
-	return strconv.ParseFloat(m.weightInput.input.Value(), 64)
+	return strconv.ParseFloat(input, 64)
 }
 
 func clearErrorCmd() tea.Cmd {
@@ -154,6 +159,13 @@ func initialModel() model {
 				enums.PepperCorn:          0.00749,
 				enums.CorianderSeed:       0.015,
 			},
+			measurementUnit: map[enums.Ingredients]string{
+				enums.RedWineVinegar:      "ml",
+				enums.WorcestershireSauce: "ml",
+				enums.Salt:                "g",
+				enums.PepperCorn:          "g",
+				enums.CorianderSeed:       "g",
+			},
 		},
 		focus: focusMenu,
 	}
@@ -168,7 +180,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.weightInput.inputErr = ""
 	case tea.KeyPressMsg:
 		switch msg.String() {
-		case "ctrl + c", "esc":
+		case "ctrl+c", "esc":
 			m.quitting = true
 			return m, tea.Quit
 		case "tab":
@@ -310,9 +322,13 @@ func (m model) ingredientsView() string {
 	var s strings.Builder
 	sorted := ingredientsMapToSortedSlice(m.options.selected)
 
-	for index, value := range sorted {
-		amount := m.ingredients.amounts[enums.Ingredients(index)]
-		fmt.Fprintf(&s, "%s: %.2fml\n", value, amount)
+	for _, value := range sorted {
+		ingredient, _ := enums.StringToIngredients(value)
+
+		amount := m.ingredients.amounts[ingredient]
+		measurement := m.ingredients.measurementUnit[ingredient]
+
+		fmt.Fprintf(&s, "%s: %.2f%s\n", value, amount, measurement)
 	}
 
 	return sectionStyle.Render(s.String())

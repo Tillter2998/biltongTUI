@@ -1,5 +1,7 @@
 package enums
 
+import "errors"
+
 type Ingredients int
 
 const (
@@ -24,11 +26,11 @@ func (i Ingredients) String() string {
 	return IngredientName[i]
 }
 
-// var IngredientName = map[Ingredients]values{
-// 	redWineVinegar:      {value: "Red Wine Vinegar", checked: true},
-// 	worcestershireSauce: {value: "Worcestershire Sauce", checked: true},
-// 	salt:                {value: "Salt", checked: true},
-// 	pepperCorn:          {value: "Pepper Corn", checked: true},
-// 	corianderSeed:       {value: "Coriander Seed", checked: true},
-// 	chiliFlakes:         {value: "Chili Flakes"},
-// }
+func StringToIngredients(value string) (Ingredients, error) {
+	for ingredient, ingredientValue := range IngredientName {
+		if ingredientValue == value {
+			return ingredient, nil
+		}
+	}
+	return 0, errors.New("Could not find matching Ingredient")
+}
