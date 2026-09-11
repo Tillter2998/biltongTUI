@@ -17,6 +17,8 @@ import (
 	"github.com/Tillter2998/biltongTUI/internal/quicksort"
 )
 
+// TODO: determine if refactoring makes sense
+
 type clearErrorMsg struct{}
 
 type optionsModel struct {
