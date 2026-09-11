@@ -17,14 +17,18 @@ import (
 	"github.com/Tillter2998/biltongTUI/internal/quicksort"
 )
 
-// TODO: determine if refactoring makes sense
-
 type clearErrorMsg struct{}
+
+type ingredientValues struct {
+	amount          float64
+	ratio           float64
+	measurementUnit string
+}
 
 type optionsModel struct {
 	cursor   int
-	choices  []string
-	selected map[enums.Ingredients]string
+	choices  []enums.Ingredients
+	selected map[enums.Ingredients]struct{}
 }
 
 type weightInputModel struct {
@@ -33,16 +37,14 @@ type weightInputModel struct {
 	errStyle lipgloss.Style
 }
 
-type ingredientAmountsModel struct {
-	amounts         map[enums.Ingredients]float64
-	ratios          map[enums.Ingredients]float64
-	measurementUnit map[enums.Ingredients]string
+type ingredientValuesModel struct {
+	values map[enums.Ingredients]*ingredientValues
 }
 
 type model struct {
 	options     optionsModel
 	weightInput weightInputModel
-	ingredients ingredientAmountsModel
+	ingredients ingredientValuesModel
 	focus       int
 	quitting    bool
 }
@@ -66,9 +68,13 @@ func (m *model) calculateAll() tea.Cmd {
 		m.weightInput.inputErr = "Input must be a number"
 		return clearErrorCmd()
 	}
+	if weight <= 0 {
+		m.weightInput.inputErr = "Input must be greater than 0"
+		return clearErrorCmd()
+	}
 
 	for ingredient := range m.options.selected {
-		m.ingredients.amounts[ingredient] = m.ingredients.ratios[ingredient] * weight
+		m.ingredients.values[ingredient].amount = m.ingredients.values[ingredient].ratio * weight
 	}
 
 	return nil
@@ -86,7 +92,7 @@ func (m *model) calculate(ingredient enums.Ingredients) tea.Cmd {
 		return clearErrorCmd()
 	}
 
-	m.ingredients.amounts[ingredient] = m.ingredients.ratios[ingredient] * weight
+	m.ingredients.values[ingredient].amount = m.ingredients.values[ingredient].ratio * weight
 
 	return nil
 }
@@ -126,45 +132,51 @@ func initialModel() model {
 		enums.CorianderSeed,
 	}
 
-	choices := ingredientsMapToSortedSlice(enums.IngredientName)
+	choices := enums.AllIngredients()
 
-	selected := make(map[enums.Ingredients]string)
+	selected := make(map[enums.Ingredients]struct{})
 	for _, value := range defaultIngredients {
-		selected[enums.Ingredients(value)] = value.String()
+		selected[enums.Ingredients(value)] = struct{}{}
 	}
 
 	return model{
 		options: optionsModel{
 			choices:  choices,
 			selected: selected,
-			cursor:   len(enums.IngredientName) - 1,
+			cursor:   len(defaultIngredients),
 		},
 		weightInput: weightInputModel{
 			input:    wi,
 			errStyle: lipgloss.NewStyle().Foreground(lipgloss.Color("9")),
 		},
-		ingredients: ingredientAmountsModel{
-			amounts: map[enums.Ingredients]float64{
-				enums.RedWineVinegar:      26.43,
-				enums.WorcestershireSauce: 13.22,
-				enums.Salt:                22.47,
-				enums.PepperCorn:          7.49,
-				enums.CorianderSeed:       15,
-			},
-			// TODO: Set ratio for chili flakes
-			ratios: map[enums.Ingredients]float64{
-				enums.RedWineVinegar:      0.02643,
-				enums.WorcestershireSauce: 0.01322,
-				enums.Salt:                0.02247,
-				enums.PepperCorn:          0.00749,
-				enums.CorianderSeed:       0.015,
-			},
-			measurementUnit: map[enums.Ingredients]string{
-				enums.RedWineVinegar:      "ml",
-				enums.WorcestershireSauce: "ml",
-				enums.Salt:                "g",
-				enums.PepperCorn:          "g",
-				enums.CorianderSeed:       "g",
+
+		ingredients: ingredientValuesModel{
+			values: map[enums.Ingredients]*ingredientValues{
+				enums.RedWineVinegar: {
+					amount:          26.43,
+					ratio:           0.02643,
+					measurementUnit: "ml",
+				},
+				enums.WorcestershireSauce: {
+					amount:          13.22,
+					ratio:           0.01322,
+					measurementUnit: "ml",
+				},
+				enums.Salt: {
+					amount:          22.47,
+					ratio:           0.02247,
+					measurementUnit: "g",
+				},
+				enums.PepperCorn: {
+					amount:          7.49,
+					ratio:           0.00749,
+					measurementUnit: "g",
+				},
+				enums.CorianderSeed: {
+					amount:          15,
+					ratio:           0.015,
+					measurementUnit: "g",
+				},
 			},
 		},
 		focus: focusMenu,
@@ -216,13 +228,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.options.cursor++
 				}
 			case "enter":
-				converted := enums.Ingredients(m.options.cursor)
-				_, ok := m.options.selected[converted]
+				ingredient := m.options.choices[m.options.cursor]
+				_, ok := m.options.selected[ingredient]
 				if ok {
-					delete(m.options.selected, converted)
+					delete(m.options.selected, ingredient)
 				} else {
-					m.options.selected[converted] = converted.String()
-					calcCmd := m.calculate(converted)
+					m.options.selected[ingredient] = struct{}{}
+					calcCmd := m.calculate(ingredient)
 					if calcCmd != nil {
 						cmds = append(cmds, calcCmd)
 					}
@@ -276,17 +288,18 @@ var sectionStyle = lipgloss.NewStyle().
 
 func (m model) optionsView() string {
 
-	s := "Options:\n"
+	var s strings.Builder
+	s.WriteString("Options:\n")
 	for i, choice := range m.options.choices {
 		cursor := " "
 		if m.options.cursor == i {
 			cursor = ">"
 		}
 		checked := " "
-		if _, ok := m.options.selected[enums.Ingredients(i)]; ok {
+		if _, ok := m.options.selected[choice]; ok {
 			checked = "x"
 		}
-		s += fmt.Sprintf("%s [%s] %s\n", cursor, checked, choice)
+		fmt.Fprintf(&s, "%s [%s] %s\n", cursor, checked, choice)
 	}
 
 	borderColor := "7"
@@ -295,7 +308,7 @@ func (m model) optionsView() string {
 	}
 	return sectionStyle.
 		BorderForeground(lipgloss.Color(borderColor)).
-		Render(s)
+		Render(s.String())
 }
 func (m model) inputView() string {
 	s := "Weight in Grams:\n"
@@ -320,29 +333,17 @@ func (m model) inputView() string {
 }
 func (m model) ingredientsView() string {
 	var s strings.Builder
-	sorted := ingredientsMapToSortedSlice(m.options.selected)
 
-	for _, value := range sorted {
-		ingredient, _ := enums.StringToIngredients(value)
+	sortedSelected := slices.Collect(maps.Keys(m.options.selected))
+	quicksort.Quicksort(sortedSelected, 0, len(m.options.selected)-1)
 
-		amount := m.ingredients.amounts[ingredient]
-		measurement := m.ingredients.measurementUnit[ingredient]
+	for _, ingredient := range sortedSelected {
+		amount := m.ingredients.values[ingredient].amount
+		measurement := m.ingredients.values[ingredient].measurementUnit
 
-		fmt.Fprintf(&s, "%s: %.2f%s\n", value, amount, measurement)
+		fmt.Fprintf(&s, "%s: %.2f%s\n", ingredient.String(), amount, measurement)
 	}
 
 	return sectionStyle.Render(s.String())
 }
 func (m model) footerView() string { return "\n(esc to quit)" }
-
-func ingredientsMapToSortedSlice(choicesMap map[enums.Ingredients]string) []string {
-
-	keys := slices.Collect(maps.Keys(choicesMap))
-	quicksort.Quicksort(keys, 0, len(keys)-1)
-	choices := make([]string, 0, len(keys))
-	for _, key := range keys {
-		choices = append(choices, enums.IngredientName[key])
-	}
-
-	return choices
-}

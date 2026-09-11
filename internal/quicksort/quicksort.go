@@ -1,8 +1,10 @@
 package quicksort
 
-import "github.com/Tillter2998/biltongTUI/internal/enums"
+import (
+	"cmp"
+)
 
-func Quicksort(arr []enums.Ingredients, low int, high int) {
+func Quicksort[S []I, I cmp.Ordered](arr S, low int, high int) {
 	if low < high {
 		pivot := getPivot(arr, low, high)
 
@@ -13,7 +15,7 @@ func Quicksort(arr []enums.Ingredients, low int, high int) {
 	}
 }
 
-func getPivot(arr []enums.Ingredients, low int, high int) int {
+func getPivot[S []I, I cmp.Ordered](arr S, low int, high int) int {
 	pivot := arr[high]
 
 	// i starts 1 behind j and keeps track of which index value to swap with j index value when j index value is less than the pivot

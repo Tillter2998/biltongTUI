@@ -1,6 +1,11 @@
 package enums
 
-import "errors"
+import (
+	"maps"
+	"slices"
+
+	"github.com/Tillter2998/biltongTUI/internal/quicksort"
+)
 
 type Ingredients int
 
@@ -13,7 +18,7 @@ const (
 	ChiliFlakes
 )
 
-var IngredientName = map[Ingredients]string{
+var ingredientName = map[Ingredients]string{
 	RedWineVinegar:      "Red Wine Vinegar",
 	WorcestershireSauce: "Worcestershire Sauce",
 	Salt:                "Salt",
@@ -23,14 +28,12 @@ var IngredientName = map[Ingredients]string{
 }
 
 func (i Ingredients) String() string {
-	return IngredientName[i]
+	return ingredientName[i]
 }
 
-func StringToIngredients(value string) (Ingredients, error) {
-	for ingredient, ingredientValue := range IngredientName {
-		if ingredientValue == value {
-			return ingredient, nil
-		}
-	}
-	return 0, errors.New("Could not find matching Ingredient")
+func AllIngredients() []Ingredients {
+	ingredients := slices.Collect(maps.Keys(ingredientName))
+	quicksort.Quicksort(ingredients, 0, len(ingredients)-1)
+
+	return ingredients
 }
