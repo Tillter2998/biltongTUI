@@ -31,19 +31,15 @@ type weightInputModel struct {
 	errStyle lipgloss.Style
 }
 
-type ingredientsModel struct {
-	redWineVinegar      float64
-	worcestershireSauce float64
-	salt                float64
-	pepperCorn          float64
-	corianderSeed       float64
-	chiliFlakes         *float64
+type ingredientAmountsModel struct {
+	amounts map[enums.Ingredients]float64
+	ratios  map[enums.Ingredients]float64
 }
 
 type model struct {
 	options     optionsModel
 	weightInput weightInputModel
-	ingredients ingredientsModel
+	ingredients ingredientAmountsModel
 	focus       int
 	quitting    bool
 }
@@ -61,21 +57,47 @@ func main() {
 	}
 }
 
-func (m *model) calculate() tea.Cmd {
-	weight, err := strconv.ParseFloat(m.weightInput.input.Value(), 64)
+func (m *model) calculateAll() tea.Cmd {
+	weight, err := m.getWeight()
 	if err != nil {
 		m.weightInput.inputErr = "Input must be a number"
 		return clearErrorCmd()
 	}
 
 	// TODO: Update this so that it only calculates for selected ingredients
-	m.ingredients.redWineVinegar = 0.02643 * weight
-	m.ingredients.worcestershireSauce = 0.01322 * weight
-	m.ingredients.salt = 0.02247 * weight
-	m.ingredients.pepperCorn = 0.00749 * weight
-	m.ingredients.corianderSeed = 0.015 * weight
+	// m.ingredients.redWineVinegar = 0.02643 * weight
+	// m.ingredients.worcestershireSauce = 0.01322 * weight
+	// m.ingredients.salt = 0.02247 * weight
+	// m.ingredients.pepperCorn = 0.00749 * weight
+	// m.ingredients.corianderSeed = 0.015 * weight
+
+	for ingredient := range m.options.selected {
+		m.ingredients.amounts[ingredient] = m.ingredients.ratios[ingredient] * weight
+	}
 
 	return nil
+}
+
+func (m *model) calculate(ingredient enums.Ingredients) tea.Cmd {
+
+	weight, err := m.getWeight()
+	if err != nil {
+		m.weightInput.inputErr = "Input must be a number"
+		return clearErrorCmd()
+	}
+
+	m.ingredients.amounts[ingredient] = m.ingredients.ratios[ingredient] * weight
+
+	return nil
+}
+
+func (m *model) getWeight() (float64, error) {
+	input := m.weightInput.input.Value()
+	if input == "" {
+		return 1000, nil
+	}
+
+	return strconv.ParseFloat(m.weightInput.input.Value(), 64)
 }
 
 func clearErrorCmd() tea.Cmd {
@@ -121,12 +143,21 @@ func initialModel() model {
 			input:    wi,
 			errStyle: lipgloss.NewStyle().Foreground(lipgloss.Color("9")),
 		},
-		ingredients: ingredientsModel{
-			redWineVinegar:      26.43,
-			worcestershireSauce: 13.22,
-			salt:                22.47,
-			pepperCorn:          7.49,
-			corianderSeed:       15,
+		ingredients: ingredientAmountsModel{
+			amounts: map[enums.Ingredients]float64{
+				enums.RedWineVinegar:      26.43,
+				enums.WorcestershireSauce: 13.22,
+				enums.Salt:                22.47,
+				enums.PepperCorn:          7.49,
+				enums.CorianderSeed:       15,
+			},
+			ratios: map[enums.Ingredients]float64{
+				enums.RedWineVinegar:      0.02643,
+				enums.WorcestershireSauce: 0.01322,
+				enums.Salt:                0.02247,
+				enums.PepperCorn:          0.00749,
+				enums.CorianderSeed:       0.015,
+			},
 		},
 		focus: focusMenu,
 	}
@@ -158,7 +189,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.focus == focusInput {
 			switch msg.String() {
 			case "enter":
-				calcCmd := m.calculate()
+				calcCmd := m.calculateAll()
 				if calcCmd != nil {
 					cmds = append(cmds, calcCmd)
 				}
@@ -181,9 +212,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				_, ok := m.options.selected[converted]
 				if ok {
 					delete(m.options.selected, converted)
-					// m.options.selected[converted] = ""
 				} else {
-					m.options.selected[converted] = enums.Ingredients(m.options.cursor).String()
+					m.options.selected[converted] = converted.String()
+					calcCmd := m.calculate(converted)
+					if calcCmd != nil {
+						cmds = append(cmds, calcCmd)
+					}
+
 				}
 			}
 		}
@@ -279,9 +314,9 @@ func (m model) ingredientsView() string {
 	var s strings.Builder
 	sorted := ingredientsMapToSortedSlice(m.options.selected)
 
-	for _, value := range sorted {
-		// TODO: Update this to display the correct quantities
-		fmt.Fprintf(&s, "%s: %.2fml\n", value, 0.0)
+	for index, value := range sorted {
+		amount := m.ingredients.amounts[enums.Ingredients(index)]
+		fmt.Fprintf(&s, "%s: %.2fml\n", value, amount)
 	}
 
 	return sectionStyle.Render(s.String())
